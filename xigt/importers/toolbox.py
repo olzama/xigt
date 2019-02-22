@@ -213,6 +213,13 @@ def make_all_tiers(item_data, options):
         if mkr not in tier_map:
             continue
         tier_id = tier_map.get(mkr)
+        # Olga Zamaraeva olzama@uw.edu Feb 22 2019
+        # The below if-clause is rather awkward. The goal is to create secondary words and phrases tiers,
+        # constructed from underlying morphemes. The words are meant to be implicitly aligned with sw
+        # (surface words). It rather breaks the model I am afraid, as it is not at all general in nature.
+        # One similar thing that was originally in the code is the next if-clause:
+        # the phrase_opts and make_phrase_tier below,
+        # but now there is a lot more of non-general code here.
         if tier_id == 'm':
             init_norm_word_tier = make_norm_word_tier('w',aln_tokens)
             norm_phrase_tier = make_norm_phrase_tier('p',[item.text for item in init_norm_word_tier])
@@ -232,6 +239,8 @@ def make_all_tiers(item_data, options):
         tier_type = tier_types[tier_id].get('type')
         refattr, aln_id = alignments.get(tier_id, (None, None))
         algn_tier = prev.get(aln_id)  # could be None
+        # # Olga Zamaraeva olzama@uw.edu Feb 22 2019
+        # After my changes, only sw, l, g, and t tiers are going to be created using the general procedure below.
         if not tier_id == 'm':
             try:
                 tier = make_tier(tier_type, tier_id,
