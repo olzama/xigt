@@ -71,7 +71,7 @@ default_igt_attribute_map = {
 }
 
 default_tier_map = {
-    "\\t": "w",
+    "\\t": "sw",
     "\\m": "m",
     "\\g": "g",
     "\\p": "pos",
@@ -79,11 +79,11 @@ default_tier_map = {
 }
 
 # if set, join tokens from first id to make phrase tier with second id
-default_make_phrase_tier = ["w", "p"]
+default_make_phrase_tier = ["sw", "l"]
 
 default_tier_types = {
-    "p": {"type": "phrases"},
-    "w": {"type": "words", "interlinear": True},
+    "l": {"type": "phrases"},
+    "sw": {"type": "words", "interlinear": True},
     "m": {"type": "morphemes", "interlinear": True},
     "g": {"type": "glosses", "interlinear": True},
     "pos": {"type": "pos", "interlinear": True},
@@ -92,11 +92,11 @@ default_tier_types = {
 
 # align Xigt tier IDs, not Toolbox markers
 default_alignments = {
-    "w": ["segmentation", "p"],
-    "m": ["segmentation", "w"],
+    "sw": ["segmentation", "l"],
+    "m": ["segmentation", "sw"],
     "g": ["alignment", "m"],
     "pos": ["alignment", "m"],
-    "t": ["alignment", "p"]
+    "t": ["alignment", "l"]
 }
 
 default_error_recovery_method = 'ratio'
@@ -213,6 +213,18 @@ def make_all_tiers(item_data, options):
         if mkr not in tier_map:
             continue
         tier_id = tier_map.get(mkr)
+        if tier_id == 'm':
+            init_norm_word_tier = make_norm_word_tier('w',aln_tokens)
+            norm_phrase_tier = make_norm_phrase_tier('p',[item.text for item in init_norm_word_tier])
+            surface_phrase = norm_phrase_tier[0].text
+            normalized_words = [item.text for item in init_norm_word_tier]
+            norm_word_tier = make_tier('words','w','segmentation',
+                                       [(surface_phrase, normalized_words)],norm_phrase_tier)
+            new_morph_tier = make_tier('morphemes','m','segmentation',aln_tokens,norm_word_tier)
+            prev[tier_id] = new_morph_tier
+            tiers = [norm_phrase_tier,norm_word_tier,new_morph_tier]
+            for tier in tiers:
+                yield tier
         if phrase_opts and phrase_opts[0] == tier_id:
             tier = make_phrase_tier(phrase_opts[1], aln_tokens)
             prev[phrase_opts[1]] = tier
@@ -220,14 +232,15 @@ def make_all_tiers(item_data, options):
         tier_type = tier_types[tier_id].get('type')
         refattr, aln_id = alignments.get(tier_id, (None, None))
         algn_tier = prev.get(aln_id)  # could be None
-        try:
-            tier = make_tier(tier_type, tier_id,
-                             refattr, aln_tokens, algn_tier)
-        except (AttributeError, AssertionError):
-            raise XigtImportError('Error making {} tier (marker: {}).'
-                                  .format(tier_type, mkr))
-        prev[tier_id] = tier
-        yield tier
+        if not tier_id == 'm':
+            try:
+                tier = make_tier(tier_type, tier_id,
+                                     refattr, aln_tokens, algn_tier)
+            except (AttributeError, AssertionError):
+                raise XigtImportError('Error making {} tier (marker: {}).'
+                                      .format(tier_type, mkr))
+            prev[tier_id] = tier
+            yield tier
 
 
 def make_phrase_tier(tier_id, aln_tokens):
@@ -242,6 +255,32 @@ def make_phrase_tier(tier_id, aln_tokens):
         ]
     )
 
+def make_norm_phrase_tier(tier_id, aln_tokens):
+    return Tier(
+        id=tier_id,
+        type='phrases',
+        items=[
+            Item(
+                id='{}1'.format(tier_id),
+                text=' '.join(aln_tokens)
+            )
+        ]
+    )
+
+# Normalized phrases, concatenated normalized words
+def make_norm_word_tier(tier_id, aln_tokens):
+    normwords = []
+    for i,aln in enumerate(aln_tokens):
+        morphs = aln[1]
+        normword = Item(
+            id='{}{}'.format(tier_id,i+1),
+            text=''.join(morphs))
+        normwords.append(normword)
+    return Tier(
+        id=tier_id,
+        type='words',
+        items=normwords
+    )
 
 def make_tier(tier_type, tier_id, refattr, aln_tokens, algn_tier):
     attrs = OrderedDict()
